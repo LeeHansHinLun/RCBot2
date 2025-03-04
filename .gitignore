@@ -10,7 +10,7 @@ utils/RCBot2_meta/x64/Release_NonHomeFolder
 utils/RCBot2_meta/RCBot2Meta
 utils/RCBot2_meta/HPB_Bot2.vcxproj.filters
 utils/RCBot2_meta/Release_NonHomeFolder
-
+hl2sdk-manifests
 alliedmodders/hl2sdk-proxy-repo
 
 # SourceMod compiled plugins

@@ -3,31 +3,27 @@ import os.path
 
 loader_name = 'RCBot2Meta'
 
-for arch in MMS.archs:
-  if builder.target.platform in ['windows', 'mac']:
+loaderproject = builder.LibraryProject(loader_name)
+loaderproject.sources += [
+  'loader.cpp'
+]
+
+for cxx in builder.targets:
+  if cxx.target.platform in ['windows', 'mac']:
     name = loader_name
     extra_ldflags = []
-  elif builder.target.platform == 'linux':
+  elif cxx.target.platform == 'linux':
     name = loader_name + '_i486'
     extra_ldflags = ['-ldl']
 
-  if arch == 'x64':
+  if cxx.target.arch == 'x86_64':
     name = loader_name + '.x64'
 
-  binary = MMS.Library(builder, name, arch)
-  binary.compiler.cxxincludes += [
-    os.path.join(MMS.mms_root, 'core'),
-    os.path.join(MMS.mms_root, 'sourcehook')
-  ]
-  binary.compiler.defines += ['META_NO_HL2SDK']
+  binary = MMS.HL2LoaderConfig(loaderproject, builder, cxx, name)
   if binary.compiler.family == 'gcc' or binary.compiler.family == 'clang':
     binary.compiler.cxxflags += ['-fno-rtti']
   elif binary.compiler.family == 'msvc':
     binary.compiler.cxxflags += ['/GR-']
   binary.compiler.linkflags += extra_ldflags
-  binary.sources = [
-    'loader.cpp'
-  ]
 
-  nodes = builder.Add(binary)
-  MMS.binaries += [nodes]
+MMS.mms_plugins += builder.Add(loaderproject)

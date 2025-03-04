@@ -71,11 +71,6 @@ compiler_defines = []
 # Build with SourceMod extension support if --sm-path was specified
 if builder.options.sm_path:
   include_paths += [
-    os.path.join(builder.options.sm_path, 'sourcepawn', 'include'),
-    os.path.join(builder.options.sm_path, 'public', 'amtl'),
-    os.path.join(builder.options.sm_path, 'public', 'amtl', 'amtl'),
-    os.path.join(builder.options.sm_path, 'public', 'extensions'),
-    os.path.join(builder.options.sm_path, 'public'),
     os.path.join(builder.currentSourcePath, 'sm_ext'),
   ]
 
@@ -99,6 +94,10 @@ mods_requiring_runcmd_overrides = [
 sdks_requring_extern_math_functions = [
   'sdk2013',
   'bms',
+  'css',
+  'dods',
+  'hl2dm',
+  'tf2',
 ]
 
 # Decouple sourcesdk MAX_PLAYERS from the project - NoSoop
@@ -125,82 +124,40 @@ else:
   # sourceFiles += [os.path.join(MMS.sm_root, 'public', 'smsdk_ext.cpp')]
   pass
 
-for sdk_name in MMS.sdks:
-  for arch in MMS.archs:
-    sdk = MMS.sdks[sdk_name]
+project = builder.LibraryProject(projectName)
+project.sources += sourceFiles
 
-    if not arch in sdk.platformSpec[builder.target.platform]:
+for sdk_name in MMS.sdks:
+  sdk = MMS.sdks[sdk_name]
+  if sdk['name'] in ['mock']:
+    continue
+
+  for cxx in builder.targets:
+    if not cxx.target.arch in sdk['platforms'][cxx.target.platform]:
       continue
 
-    name = projectName + '.' + sdk.ext
-    binary = MMS.HL2Library(builder, name, sdk, arch)
+    name = projectName + '.' + sdk['extension']
+    binary = MMS.HL2PluginConfig(project, builder, cxx, name, sdk)
+    compiler = binary.compiler
 
-    binary.sources += sourceFiles
-
-    cxx = binary.compiler
-    if (cxx.version >= 'gcc-4.0') or cxx.family == 'clang':
-      cxx.cflags += [ '-Dstrcmpi=strcasecmp', ]
-
-    if cxx.family == 'msvc':
+    if compiler.family == 'msvc':
       # suppress macro redefinition of 'offsetof'
-      cxx.cflags += [ '/wd4005' ]
+      compiler.cflags += [ '/wd4005' ]
 
-    cxx.cxxincludes += include_paths
-    cxx.defines += compiler_defines
+    compiler.cxxincludes += include_paths
+    compiler.defines += compiler_defines
 
-    if sdk_name in mods_requiring_runcmd_overrides:
-      cxx.defines += [ 'OVERRIDE_RUNCMD' ]
+    if sdk['name'] in mods_requiring_runcmd_overrides:
+      compiler.defines += [ 'OVERRIDE_RUNCMD' ]
 
-    if sdk_name in sdks_requring_extern_math_functions and builder.target.platform == 'linux':
-      cxx.defines += [ 'MATH_LIB_FIX' ]
+    # Epic hack for rcbot2
+    hl2sdkfolder = 'hl2sdk-' + sdk['name']
+    compiler.cxxincludes += [ os.path.join(builder.options.hl2sdk_root, hl2sdkfolder, 'game', 'server') ]
 
     # RCBot:  Library requires exceptions
-    if '-fno-exceptions' in cxx.cflags: cxx.cflags.remove('-fno-exceptions')
-
-    if builder.target.platform == 'linux':
-      if sdk.name == 'episode1':
-        lib_folder = os.path.join(sdk.path, 'linux_sdk')
-      elif sdk.name in ['sdk2013', 'bms', 'css', 'dods', 'hl2dm', 'tf2']:
-        lib_folder = os.path.join(sdk.path, 'lib', 'public', 'linux32')
-      elif arch == 'x64':
-        lib_folder = os.path.join(sdk.path, 'lib', 'linux64')
-      else:
-        lib_folder = os.path.join(sdk.path, 'lib', 'linux32')
-    elif builder.target.platform == 'mac':
-      if sdk.name in ['sdk2013', 'bms']:
-        lib_folder = os.path.join(sdk.path, 'lib', 'public', 'osx32')
-      elif arch == 'x64':
-        lib_folder = os.path.join(sdk.path, 'lib', 'osx64')
-      else:
-        lib_folder = os.path.join(sdk.path, 'lib', 'mac')
-
-    if sdk.name in ['css', 'hl2dm', 'dods', 'sdk2013', 'bms', 'tf2', 'l4d', 'nucleardawn', 'l4d2']:
-      if builder.target.platform in ['linux', 'mac']:
-        cxx.defines += ['NO_HOOK_MALLOC', 'NO_MALLOC_OVERRIDE']
-		
+    if '-fno-exceptions' in compiler.cflags: compiler.cflags.remove('-fno-exceptions')
+	
 	# Decouple sourcesdk MAX_PLAYERS from the project - NoSoop
-    cxx.defines += ['RCBOT_MAXPLAYERS={}'.format(override_maxplayers.get(sdk.name, default_maxplayers))]
+    compiler.defines += ['RCBOT_MAXPLAYERS={}'.format(override_maxplayers.get(sdk['name'], default_maxplayers))]
 
-    if builder.target.platform in ['linux', 'mac']:
-      ## RCBot2: link other dependencies
-      if sdk.name in ['sdk2013', 'bms', 'css', 'dods', 'hl2dm', 'tf2']:
-        cxx.postlink += [
-          cxx.Dep(os.path.join(lib_folder, 'mathlib.a')),
-          cxx.Dep(os.path.join(lib_folder, 'tier2.a')),
-          cxx.Dep(os.path.join(lib_folder, 'tier3.a')),
-        ]
-      else:
-        cxx.postlink += [
-          cxx.Dep(os.path.join(lib_folder, 'mathlib_i486.a')),
-          cxx.Dep(os.path.join(lib_folder, 'tier2_i486.a')),
-          cxx.Dep(os.path.join(lib_folder, 'tier3_i486.a')),
-        ]
-      cxx.postlink += [
-        'libvstdlib_srv.so',
-        '-lm',
-        '-ldl',
-        '-lpthread'
-      ]
-
-    nodes = builder.Add(binary)
-    MMS.binaries += [nodes]
+MMS.mms_plugins += builder.Add(project)
